@@ -45,11 +45,11 @@ func GenerateMonthlyReport(month time.Time) error {
 
 	pdf.SetY(titleYPos)
 	pdf.Cell(60, 10, fmt.Sprintf("Relatorio de Horas Extras - %s", month.Format("01/2006")))
-	pdf.Ln(15)
+	pdf.Ln(15) // Espaçamento após o título
 
 	for _, overtime := range overtimes {
 		pdf.Cell(40, 10, fmt.Sprintf("Funcionario: %s", overtime.FuncionarioNome))
-		pdf.Ln(10)
+		pdf.Ln(10) // Espaçamento entre informações do funcionário e hora extra
 
 		startTime := overtime.HoraInicio.Format("02/01/2006 15:04")
 		endTime := overtime.HoraFim.Format("02/01/2006 15:04")
@@ -61,24 +61,24 @@ func GenerateMonthlyReport(month time.Time) error {
 		// Definindo a cor verde para "Horas extras"
 		pdf.SetTextColor(0, 128, 0)
 		pdf.Cell(40, 10, fmt.Sprintf("Horas extras: %.2f", overtime.HorasExtras))
-		pdf.Ln(15)
 
-		// Voltando à cor padrão
+		// Definindo a cor de texto padrão
 		pdf.SetTextColor(0, 0, 0)
+
+		pdf.Ln(15)
 	}
 
-	pdf.Ln(15)
-	pdf.SetFont("Arial", "B", 12)
+	pdf.Ln(10) // Adicionando um espaçamento entre a última informação de horas extras e o total
 
+	pdf.SetFont("Arial", "B", 12) // Tamanho do texto "Total Horas Extras" alterado para 12
+
+	// Definindo a cor verde para "Total Horas Extras"
 	pdf.SetTextColor(0, 128, 0)
 	pdf.Cell(40, 10, "Total Horas Extras:")
-	pdf.Ln(7)
 	totalMinutes := getTotalMinutes(overtimes)
 	hours := int(totalMinutes / 60)
 	minutes := int(totalMinutes) % 60
-	pdf.Cell(40, 10, fmt.Sprintf("%d horas e %d minutos", hours, minutes))
-
-	pdf.SetTextColor(0, 0, 0)
+	pdf.CellFormat(0, 10, fmt.Sprintf("%d horas e %d minutos", hours, minutes), "", 0, "L", false, 0, "")
 
 	err = pdf.OutputFileAndClose("relatorio_horas_extras.pdf")
 	if err != nil {
