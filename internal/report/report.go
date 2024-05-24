@@ -48,7 +48,7 @@ func GenerateMonthlyReport(month time.Time) error {
 	pdf.Ln(15)
 
 	for _, overtime := range overtimes {
-		pdf.Cell(40, 10, fmt.Sprintf("Funcionario: %s (Funcionario ID: %d)", overtime.FuncionarioNome, overtime.FuncionarioID))
+		pdf.Cell(40, 10, fmt.Sprintf("Funcionario: %s", overtime.FuncionarioNome))
 		pdf.Ln(10)
 
 		startTime := overtime.HoraInicio.Format("02/01/2006 15:04")
