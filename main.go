@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/italopatrick/workhours-cli/internal/database"
-	"github.com/italopatrick/workhours-cli/internal/report"
+	"github.com/italopatrick/overtime-cli/internal/database"
+	"github.com/italopatrick/overtime-cli/internal/report"
 	"github.com/manifoldco/promptui"
 )
 

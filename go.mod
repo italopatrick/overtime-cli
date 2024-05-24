@@ -1,4 +1,4 @@
-module github.com/italopatrick/workhours-cli
+module github.com/italopatrick/overtime-cli
 
 go 1.21.5
 

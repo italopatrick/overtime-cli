@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/italopatrick/workhours-cli/internal/database"
+	"github.com/italopatrick/overtime-cli/internal/database"
 	"github.com/jung-kurt/gofpdf"
 )
 
