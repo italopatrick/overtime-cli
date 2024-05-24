@@ -65,9 +65,11 @@ func GenerateMonthlyReport(month time.Time) error {
 		// Definindo a cor de texto padrão
 		pdf.SetTextColor(0, 0, 0)
 
-		// Definindo a cor verde para "Horas extras"
+		// Exibindo "Horas extras" e "Total Horas Extras" em preto
+		pdf.Cell(40, 10, "Horas extras: ")
 		pdf.SetTextColor(0, 128, 0)
-		pdf.Cell(40, 10, fmt.Sprintf("Horas extras: %.2f", overtime.HorasExtras))
+		pdf.CellFormat(0, 10, fmt.Sprintf("%.2f", overtime.HorasExtras), "", 0, "", false, 0, "")
+		pdf.SetTextColor(0, 0, 0)
 		pdf.Ln(15)
 	}
 
@@ -75,13 +77,12 @@ func GenerateMonthlyReport(month time.Time) error {
 
 	pdf.SetFont("Arial", "B", 12)
 
-	// Definindo a cor verde para "Total Horas Extras"
-	pdf.SetTextColor(0, 128, 0)
+	// Exibindo "Total Horas Extras" em preto
 	pdf.Cell(40, 10, "Total Horas Extras: ")
 	totalMinutes := getTotalMinutes(overtimes)
 	hours := int(totalMinutes / 60)
 	minutes := int(totalMinutes) % 60
-	pdf.CellFormat(0, 10, fmt.Sprintf("%d horas e %d minutos", hours, minutes), "", 0, "L", false, 0, "")
+	pdf.CellFormat(0, 10, fmt.Sprintf("%d horas e %d minutos", hours, minutes), "", 0, "", false, 0, "")
 
 	err = pdf.OutputFileAndClose("relatorio_horas_extras.pdf")
 	if err != nil {
