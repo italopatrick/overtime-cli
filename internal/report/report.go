@@ -10,9 +10,9 @@ import (
 	"github.com/jung-kurt/gofpdf"
 )
 
-// GenerateMonthlyReport gera um relatório mensal de horas extras
-func GenerateMonthlyReport(month time.Time) error {
-	overtimes, err := database.GetOvertimeForMonth(month)
+// GenerateMonthlyReport gera um relatório mensal de horas extras para um funcionário específico
+func GenerateMonthlyReport(month time.Time, funcionarioID int) error {
+	overtimes, err := database.GetOvertimeForMonth(month, funcionarioID)
 	if err != nil {
 		return fmt.Errorf("Erro ao obter horas extras do banco de dados: %v", err)
 	}
@@ -68,7 +68,7 @@ func GenerateMonthlyReport(month time.Time) error {
 		// Exibindo "Horas extras" e "Total Horas Extras" em preto
 		pdf.Cell(40, 10, "Horas extras: ")
 		pdf.SetTextColor(0, 128, 0)
-		pdf.CellFormat(0, 10, fmt.Sprintf("%.2f", overtime.HorasExtras), "", 0, "", false, 0, "")
+		pdf.CellFormat(0, 10, fmt.Sprintf("%.2f", overtime.HorasExtras), "", 0, "", false, 0, "") // Adicionando o valor das horas extras na mesma linha
 		pdf.SetTextColor(0, 0, 0)
 		pdf.Ln(15)
 	}
@@ -93,11 +93,19 @@ func GenerateMonthlyReport(month time.Time) error {
 	return nil
 }
 
-// getTotalMinutes calcula o total de minutos de horas extras
 func getTotalMinutes(overtimes []database.Overtime) float64 {
 	totalMinutes := 0.0
 	for _, overtime := range overtimes {
-		totalMinutes += overtime.HorasExtras * 60
+		start := overtime.HoraInicio
+		end := overtime.HoraFim
+
+		// Verificar se o horário de término é anterior ao de início, indicando que ultrapassou o dia
+		if end.Before(start) {
+			end = end.AddDate(0, 0, 1) // Adicionar um dia ao horário de término
+		}
+
+		duration := end.Sub(start)         // Calcular a diferença entre os horários
+		totalMinutes += duration.Minutes() // Converter a diferença para minutos
 	}
 	return totalMinutes
 }

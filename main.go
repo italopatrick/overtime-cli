@@ -179,6 +179,20 @@ func viewMyOvertime() {
 }
 
 func generateMonthlyReport() {
+	promptFuncionario := promptui.Prompt{
+		Label: "ID do Funcionário",
+	}
+	funcionarioIDStr, err := promptFuncionario.Run()
+	if err != nil {
+		fmt.Printf("Prompt falhou %v\n", err)
+		return
+	}
+	funcionarioID, err := strconv.Atoi(funcionarioIDStr)
+	if err != nil {
+		fmt.Printf("Erro ao converter o ID do funcionário para inteiro: %v\n", err)
+		return
+	}
+
 	promptMonth := promptui.Prompt{
 		Label: "Mês (AAAA-MM)",
 	}
@@ -193,7 +207,7 @@ func generateMonthlyReport() {
 		return
 	}
 
-	err = report.GenerateMonthlyReport(month)
+	err = report.GenerateMonthlyReport(month, funcionarioID)
 	if err != nil {
 		fmt.Printf("Erro ao gerar relatório: %v\n", err)
 		return

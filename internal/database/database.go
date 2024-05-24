@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -128,8 +129,38 @@ func AddHorasExtras(funcionarioID int64, horaInicio, horaFim time.Time, observac
 	return nil
 }
 
+func calculateOvertimeHours(start time.Time, end time.Time) float64 {
+	// Verificar se o horário de término é anterior ao de início, indicando que ultrapassou o dia
+	if end.Before(start) {
+		end = end.AddDate(0, 0, 1) // Adicionar um dia ao horário de término
+	}
+
+	duration := end.Sub(start) // Calcular a diferença entre os horários
+	totalHours := duration.Hours()
+
+	// Converter a diferença para horas com precisão de dois decimais
+	return math.Round(totalHours*100) / 100
+}
+
+func calculateTotalMinutes(overtimes []Overtime) float64 {
+	totalMinutes := 0.0
+	for _, overtime := range overtimes {
+		start := overtime.HoraInicio
+		end := overtime.HoraFim
+
+		// Verificar se o horário de término é anterior ao de início, indicando que ultrapassou o dia
+		if end.Before(start) {
+			end = end.AddDate(0, 0, 1) // Adicionar um dia ao horário de término
+		}
+
+		duration := end.Sub(start)         // Calcular a diferença entre os horários
+		totalMinutes += duration.Minutes() // Converter a diferença para minutos
+	}
+	return totalMinutes
+}
+
 // GetOvertimeForMonth retorna as horas extras para um determinado mês
-func GetOvertimeForMonth(month time.Time) ([]Overtime, error) {
+func GetOvertimeForMonth(month time.Time, funcionarioID int) ([]Overtime, error) {
 	db := initializeDB()
 	defer db.Close()
 
@@ -140,18 +171,17 @@ func GetOvertimeForMonth(month time.Time) ([]Overtime, error) {
         SELECT he.id, 
                he.funcionario_id,
                f.nome AS funcionario_nome, 
-               (CAST((julianday(he.hora_fim) - julianday(he.hora_inicio)) * 24 AS INTEGER)) + 
-               (CAST((julianday(he.hora_fim) - julianday(he.hora_inicio)) * 24 * 60 AS INTEGER) % 60) / 100.0 AS horas_extras,
                he.hora_inicio, 
                he.hora_fim,
-			   coalesce (he.observacao,'') AS observacao,
+               COALESCE(he.observacao,'') AS observacao,
                he.data_registro 
         FROM horas_extras he
         JOIN funcionario f ON he.funcionario_id = f.id
         WHERE he.data_registro >= ? 
-              AND he.data_registro <= ?`
+              AND he.data_registro <= ?
+              AND he.funcionario_id = ?`
 
-	rows, err := db.Query(query, startOfMonth, endOfMonth)
+	rows, err := db.Query(query, startOfMonth, endOfMonth, funcionarioID)
 	if err != nil {
 		return nil, fmt.Errorf("Erro ao consultar o banco de dados: %v", err)
 	}
@@ -161,10 +191,27 @@ func GetOvertimeForMonth(month time.Time) ([]Overtime, error) {
 
 	for rows.Next() {
 		var overtime Overtime
-		err := rows.Scan(&overtime.ID, &overtime.FuncionarioID, &overtime.FuncionarioNome, &overtime.HorasExtras, &overtime.HoraInicio, &overtime.HoraFim, &overtime.Observacao, &overtime.DataRegistro)
+		err := rows.Scan(&overtime.ID, &overtime.FuncionarioID, &overtime.FuncionarioNome, &overtime.HoraInicio, &overtime.HoraFim, &overtime.Observacao, &overtime.DataRegistro)
 		if err != nil {
 			return nil, fmt.Errorf("Erro ao ler o resultado da consulta: %v", err)
 		}
+
+		// Verificar se o horário de término é anterior ao de início, indicando que ultrapassou o dia
+		if overtime.HoraFim.Before(overtime.HoraInicio) {
+			overtime.HoraFim = overtime.HoraFim.AddDate(0, 0, 1) // Adicionar um dia ao horário de término
+		}
+
+		// Calcular a diferença entre o horário de início e término em minutos
+		duration := overtime.HoraFim.Sub(overtime.HoraInicio)
+		totalMinutes := duration.Minutes()
+
+		// Formatando para horas e minutos
+		hours := int(totalMinutes / 60)
+		minutes := int(totalMinutes) % 60
+
+		// Armazenar o total formatado no campo HorasExtras
+		overtime.HorasExtras = float64(hours) + float64(minutes)/100
+
 		overtimes = append(overtimes, overtime)
 	}
 
