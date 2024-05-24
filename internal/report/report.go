@@ -29,7 +29,7 @@ func GenerateMonthlyReport(month time.Time) error {
 	}
 
 	// Caminho relativo ao arquivo da logo
-	relativePath := "/assets/logo.png"
+	relativePath := "assets/logo.png"
 
 	// Construir o caminho absoluto
 	logoPath := filepath.Join(wd, relativePath)
@@ -58,23 +58,26 @@ func GenerateMonthlyReport(month time.Time) error {
 		pdf.Cell(40, 10, fmt.Sprintf("Horario Fim: %s", endTime))
 		pdf.Ln(7)
 
-		// Definindo a cor verde para "Horas extras"
-		pdf.SetTextColor(0, 128, 0)
-		pdf.Cell(40, 10, fmt.Sprintf("Horas extras: %.2f", overtime.HorasExtras))
+		// Adicionando a observação
+		pdf.Cell(40, 10, fmt.Sprintf("Observacao: %s", overtime.Observacao))
+		pdf.Ln(15)
 
 		// Definindo a cor de texto padrão
 		pdf.SetTextColor(0, 0, 0)
 
+		// Definindo a cor verde para "Horas extras"
+		pdf.SetTextColor(0, 128, 0)
+		pdf.Cell(40, 10, fmt.Sprintf("Horas extras: %.2f", overtime.HorasExtras))
 		pdf.Ln(15)
 	}
 
-	pdf.Ln(10) // Adicionando um espaçamento entre a última informação de horas extras e o total
+	pdf.Ln(10)
 
-	pdf.SetFont("Arial", "B", 12) // Tamanho do texto "Total Horas Extras" alterado para 12
+	pdf.SetFont("Arial", "B", 12)
 
 	// Definindo a cor verde para "Total Horas Extras"
 	pdf.SetTextColor(0, 128, 0)
-	pdf.Cell(40, 10, "Total Horas Extras:")
+	pdf.Cell(40, 10, "Total Horas Extras: ")
 	totalMinutes := getTotalMinutes(overtimes)
 	hours := int(totalMinutes / 60)
 	minutes := int(totalMinutes) % 60

@@ -21,27 +21,59 @@ func initializeDB() *sql.DB {
 
 	// Criar tabela funcionario se não existir
 	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS funcionario (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			nome TEXT
-		)
-	`)
+        CREATE TABLE IF NOT EXISTS funcionario (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT
+        )
+    `)
 	if err != nil {
 		log.Fatalf("Erro ao criar a tabela funcionario: %v", err)
 	}
 
+	// Verificar se a coluna 'observacao' existe na tabela 'horas_extras'
+	rows, err := db.Query("PRAGMA table_info(horas_extras)")
+	if err != nil {
+		log.Fatalf("Erro ao verificar a estrutura da tabela horas_extras: %v", err)
+	}
+	defer rows.Close()
+
+	var columnExists bool
+	for rows.Next() {
+		var cid int
+		var name string
+		var _type string
+		var notnull int
+		var dflt_value interface{} // Alteração aqui
+		var pk int
+		err := rows.Scan(&cid, &name, &_type, &notnull, &dflt_value, &pk)
+		if err != nil {
+			log.Fatalf("Erro ao ler informações da coluna: %v", err)
+		}
+		if name == "observacao" {
+			columnExists = true
+			break
+		}
+	}
+	if !columnExists {
+		_, err = db.Exec(`ALTER TABLE horas_extras ADD COLUMN observacao TEXT`)
+		if err != nil {
+			log.Fatalf("Erro ao adicionar a coluna observacao à tabela horas_extras: %v", err)
+		}
+	}
+
 	// Criar tabela horas_extras se não existir
 	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS horas_extras (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			funcionario_id INTEGER,
-			horas REAL,
-			hora_inicio DATETIME,
-			hora_fim DATETIME,
-			data_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
-			FOREIGN KEY(funcionario_id) REFERENCES funcionario(id)
-		)
-	`)
+        CREATE TABLE IF NOT EXISTS horas_extras (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            funcionario_id INTEGER,
+            horas REAL,
+            hora_inicio DATETIME,
+            hora_fim DATETIME,
+            observacao TEXT,
+            data_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(funcionario_id) REFERENCES funcionario(id)
+        )
+    `)
 	if err != nil {
 		log.Fatalf("Erro ao criar a tabela horas_extras: %v", err)
 	}
@@ -75,19 +107,19 @@ func AddUsuario(nome string) (int64, error) {
 }
 
 // AddHorasExtras adiciona horas extras para um funcionário com hora de início e fim
-func AddHorasExtras(funcionarioID int64, horaInicio, horaFim time.Time) error {
+func AddHorasExtras(funcionarioID int64, horaInicio, horaFim time.Time, observacao string) error {
 	db := initializeDB()
 	defer db.Close()
 
 	horas := horaFim.Sub(horaInicio).Hours()
 
-	stmt, err := db.Prepare("INSERT INTO horas_extras(funcionario_id, horas, hora_inicio, hora_fim) VALUES(?, ?, ?, ?)")
+	stmt, err := db.Prepare("INSERT INTO horas_extras(funcionario_id, horas, hora_inicio, hora_fim, observacao) VALUES(?, ?, ?, ?, ?)")
 	if err != nil {
 		return fmt.Errorf("Erro ao preparar a declaração SQL: %v", err)
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(funcionarioID, horas, horaInicio, horaFim)
+	_, err = stmt.Exec(funcionarioID, horas, horaInicio, horaFim, observacao)
 	if err != nil {
 		return fmt.Errorf("Erro ao executar a declaração SQL: %v", err)
 	}
@@ -111,7 +143,8 @@ func GetOvertimeForMonth(month time.Time) ([]Overtime, error) {
                (CAST((julianday(he.hora_fim) - julianday(he.hora_inicio)) * 24 AS INTEGER)) + 
                (CAST((julianday(he.hora_fim) - julianday(he.hora_inicio)) * 24 * 60 AS INTEGER) % 60) / 100.0 AS horas_extras,
                he.hora_inicio, 
-               he.hora_fim, 
+               he.hora_fim,
+			   coalesce (he.observacao,'') AS observacao,
                he.data_registro 
         FROM horas_extras he
         JOIN funcionario f ON he.funcionario_id = f.id
@@ -128,7 +161,7 @@ func GetOvertimeForMonth(month time.Time) ([]Overtime, error) {
 
 	for rows.Next() {
 		var overtime Overtime
-		err := rows.Scan(&overtime.ID, &overtime.FuncionarioID, &overtime.FuncionarioNome, &overtime.HorasExtras, &overtime.HoraInicio, &overtime.HoraFim, &overtime.DataRegistro)
+		err := rows.Scan(&overtime.ID, &overtime.FuncionarioID, &overtime.FuncionarioNome, &overtime.HorasExtras, &overtime.HoraInicio, &overtime.HoraFim, &overtime.Observacao, &overtime.DataRegistro)
 		if err != nil {
 			return nil, fmt.Errorf("Erro ao ler o resultado da consulta: %v", err)
 		}

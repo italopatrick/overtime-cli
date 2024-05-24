@@ -107,7 +107,17 @@ func addHorasExtras() {
 		return
 	}
 
-	err = database.AddHorasExtras(codigoFuncionario, horaInicio, horaFim) // Alteração nesta linha
+	prompt = promptui.Prompt{
+		Label: "Observação",
+	}
+
+	observacao, err := prompt.Run()
+	if err != nil {
+		fmt.Printf("Erro ao ler a observação: %v\n", err)
+		return
+	}
+
+	err = database.AddHorasExtras(codigoFuncionario, horaInicio, horaFim, observacao)
 	if err != nil {
 		fmt.Printf("Erro ao adicionar horas extras: %v\n", err)
 		return
