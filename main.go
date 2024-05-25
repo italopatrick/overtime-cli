@@ -117,7 +117,23 @@ func addHorasExtras() {
 		return
 	}
 
-	err = database.AddHorasExtras(codigoFuncionario, horaInicio, horaFim, observacao)
+	prompt = promptui.Prompt{
+		Label: "Pausa (em minutos)",
+	}
+
+	pausaStr, err := prompt.Run()
+	if err != nil {
+		fmt.Printf("Erro ao ler a pausa: %v\n", err)
+		return
+	}
+
+	pausa, err := strconv.ParseFloat(pausaStr, 64)
+	if err != nil {
+		fmt.Printf("Erro ao converter a pausa para número: %v\n", err)
+		return
+	}
+
+	err = database.AddHorasExtras(codigoFuncionario, horaInicio, horaFim, observacao, pausa)
 	if err != nil {
 		fmt.Printf("Erro ao adicionar horas extras: %v\n", err)
 		return

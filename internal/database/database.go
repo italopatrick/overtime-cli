@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"math"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -44,21 +44,21 @@ func initializeDB() *sql.DB {
 		var name string
 		var _type string
 		var notnull int
-		var dflt_value interface{} // Alteração aqui
+		var dflt_value interface{}
 		var pk int
 		err := rows.Scan(&cid, &name, &_type, &notnull, &dflt_value, &pk)
 		if err != nil {
 			log.Fatalf("Erro ao ler informações da coluna: %v", err)
 		}
-		if name == "observacao" {
+		if name == "pausa" {
 			columnExists = true
 			break
 		}
 	}
 	if !columnExists {
-		_, err = db.Exec(`ALTER TABLE horas_extras ADD COLUMN observacao TEXT`)
+		_, err = db.Exec(`ALTER TABLE horas_extras ADD COLUMN pausa REAL`)
 		if err != nil {
-			log.Fatalf("Erro ao adicionar a coluna observacao à tabela horas_extras: %v", err)
+			log.Fatalf("Erro ao adicionar a coluna pausa à tabela horas_extras: %v", err)
 		}
 	}
 
@@ -71,6 +71,7 @@ func initializeDB() *sql.DB {
             hora_inicio DATETIME,
             hora_fim DATETIME,
             observacao TEXT,
+			pausa REAL,
             data_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(funcionario_id) REFERENCES funcionario(id)
         )
@@ -108,19 +109,31 @@ func AddUsuario(nome string) (int64, error) {
 }
 
 // AddHorasExtras adiciona horas extras para um funcionário com hora de início e fim
-func AddHorasExtras(funcionarioID int64, horaInicio, horaFim time.Time, observacao string) error {
+func AddHorasExtras(funcionarioID int64, horaInicio, horaFim time.Time, observacao string, pausaEmMinutos float64) error {
 	db := initializeDB()
 	defer db.Close()
 
-	horas := horaFim.Sub(horaInicio).Hours()
+	// Converter a pausa de minutos para horas
+	pausaEmHoras := pausaEmMinutos / 60.0
 
-	stmt, err := db.Prepare("INSERT INTO horas_extras(funcionario_id, horas, hora_inicio, hora_fim, observacao) VALUES(?, ?, ?, ?, ?)")
+	// Calcular as horas totais trabalhadas
+	horasTrabalhadas := horaFim.Sub(horaInicio).Hours()
+
+	// Verificar se as horas trabalhadas são menores ou iguais à pausa
+	if horasTrabalhadas <= pausaEmHoras {
+		return fmt.Errorf("As horas trabalhadas são menores ou iguais à pausa")
+	}
+
+	// Calcular as horas extras subtraindo a pausa das horas totais
+	horasExtras := horasTrabalhadas - pausaEmHoras
+
+	stmt, err := db.Prepare("INSERT INTO horas_extras(funcionario_id, horas, hora_inicio, hora_fim, observacao, pausa) VALUES(?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return fmt.Errorf("Erro ao preparar a declaração SQL: %v", err)
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(funcionarioID, horas, horaInicio, horaFim, observacao)
+	_, err = stmt.Exec(funcionarioID, horasExtras, horaInicio, horaFim, observacao, pausaEmMinutos)
 	if err != nil {
 		return fmt.Errorf("Erro ao executar a declaração SQL: %v", err)
 	}
@@ -129,17 +142,16 @@ func AddHorasExtras(funcionarioID int64, horaInicio, horaFim time.Time, observac
 	return nil
 }
 
-func calculateOvertimeHours(start time.Time, end time.Time) float64 {
+func calculateOvertimeHours(horaInicio, horaFim time.Time, pausa float64) float64 {
 	// Verificar se o horário de término é anterior ao de início, indicando que ultrapassou o dia
-	if end.Before(start) {
-		end = end.AddDate(0, 0, 1) // Adicionar um dia ao horário de término
+	if horaFim.Before(horaInicio) {
+		horaFim = horaFim.AddDate(0, 0, 1) // Adicionar um dia ao horário de término
 	}
 
-	duration := end.Sub(start) // Calcular a diferença entre os horários
-	totalHours := duration.Hours()
+	duration := horaFim.Sub(horaInicio)           // Calcular a diferença entre os horários
+	totalMinutes := duration.Minutes() - pausa*60 // Subtrair a pausa em minutos
 
-	// Converter a diferença para horas com precisão de dois decimais
-	return math.Round(totalHours*100) / 100
+	return totalMinutes / 60 // Converter de minutos para horas
 }
 
 func calculateTotalMinutes(overtimes []Overtime) float64 {
@@ -171,10 +183,12 @@ func GetOvertimeForMonth(month time.Time, funcionarioID int) ([]Overtime, error)
         SELECT he.id, 
                he.funcionario_id,
                f.nome AS funcionario_nome, 
+               he.horas,
                he.hora_inicio, 
                he.hora_fim,
                COALESCE(he.observacao,'') AS observacao,
-               he.data_registro 
+               he.data_registro,
+               COALESCE(NULLIF(he.pausa, ''), '0') AS pausa
         FROM horas_extras he
         JOIN funcionario f ON he.funcionario_id = f.id
         WHERE he.data_registro >= ? 
@@ -191,10 +205,18 @@ func GetOvertimeForMonth(month time.Time, funcionarioID int) ([]Overtime, error)
 
 	for rows.Next() {
 		var overtime Overtime
-		err := rows.Scan(&overtime.ID, &overtime.FuncionarioID, &overtime.FuncionarioNome, &overtime.HoraInicio, &overtime.HoraFim, &overtime.Observacao, &overtime.DataRegistro)
+		var pausaStr string
+		err := rows.Scan(&overtime.ID, &overtime.FuncionarioID, &overtime.FuncionarioNome, &overtime.HorasExtras, &overtime.HoraInicio, &overtime.HoraFim, &overtime.Observacao, &overtime.DataRegistro, &pausaStr)
 		if err != nil {
 			return nil, fmt.Errorf("Erro ao ler o resultado da consulta: %v", err)
 		}
+
+		// Converter pausa para float64
+		pausa, err := strconv.ParseFloat(pausaStr, 64)
+		if err != nil {
+			return nil, fmt.Errorf("Erro ao converter pausa para float64: %v", err)
+		}
+		overtime.Pausa = pausa
 
 		// Verificar se o horário de término é anterior ao de início, indicando que ultrapassou o dia
 		if overtime.HoraFim.Before(overtime.HoraInicio) {
@@ -204,6 +226,9 @@ func GetOvertimeForMonth(month time.Time, funcionarioID int) ([]Overtime, error)
 		// Calcular a diferença entre o horário de início e término em minutos
 		duration := overtime.HoraFim.Sub(overtime.HoraInicio)
 		totalMinutes := duration.Minutes()
+
+		// Subtrair a pausa dos minutos totais
+		totalMinutes -= overtime.Pausa
 
 		// Formatando para horas e minutos
 		hours := int(totalMinutes / 60)
@@ -229,19 +254,25 @@ func GetHorasExtrasFuncionario(funcionarioID int64, month time.Time) ([]Overtime
 	startOfMonth := month.Format("2006-01-02")
 	endOfMonth := month.AddDate(0, 1, 0).Add(-time.Second).Format("2006-01-02 15:04:05")
 
-	rows, err := db.Query(`
-		SELECT id, 
-			   (CAST((julianday(hora_fim) - julianday(hora_inicio)) * 24 AS INTEGER)) + 
-			   (CAST((julianday(hora_fim) - julianday(hora_inicio)) * 24 * 60 AS INTEGER) % 60) / 100.0 AS horas_extras,
-			   hora_inicio, 
-			   hora_fim, 
-			   data_registro 
-		FROM horas_extras 
-		WHERE funcionario_id = ? 
-			  AND data_registro >= ? 
-			  AND data_registro <= ?`, funcionarioID, startOfMonth, endOfMonth)
+	query := `
+		SELECT he.id, 
+			   he.funcionario_id,
+			   f.nome AS funcionario_nome, 
+			   he.horas,
+			   he.hora_inicio, 
+			   he.hora_fim,
+			   COALESCE(he.observacao,'') AS observacao,
+			   he.data_registro,
+			   COALESCE(NULLIF(he.pausa, ''), '0') AS pausa
+		FROM horas_extras he
+		JOIN funcionario f ON he.funcionario_id = f.id
+		WHERE he.data_registro >= ? 
+			  AND he.data_registro <= ?
+			  AND he.funcionario_id = ?`
+
+	rows, err := db.Query(query, startOfMonth, endOfMonth, funcionarioID)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao consultar o banco de dados: %v", err)
+		return nil, fmt.Errorf("Erro ao consultar o banco de dados: %v", err)
 	}
 	defer rows.Close()
 
@@ -249,15 +280,43 @@ func GetHorasExtrasFuncionario(funcionarioID int64, month time.Time) ([]Overtime
 
 	for rows.Next() {
 		var overtime Overtime
-		err := rows.Scan(&overtime.ID, &overtime.HorasExtras, &overtime.HoraInicio, &overtime.HoraFim, &overtime.DataRegistro)
+		var pausaStr string
+		err := rows.Scan(&overtime.ID, &overtime.FuncionarioID, &overtime.FuncionarioNome, &overtime.HorasExtras, &overtime.HoraInicio, &overtime.HoraFim, &overtime.Observacao, &overtime.DataRegistro, &pausaStr)
 		if err != nil {
-			return nil, fmt.Errorf("erro ao ler o resultado da consulta: %v", err)
+			return nil, fmt.Errorf("Erro ao ler o resultado da consulta: %v", err)
 		}
+
+		// Converter pausa para float64
+		pausa, err := strconv.ParseFloat(pausaStr, 64)
+		if err != nil {
+			return nil, fmt.Errorf("Erro ao converter pausa para float64: %v", err)
+		}
+		overtime.Pausa = pausa
+
+		// Verificar se o horário de término é anterior ao de início, indicando que ultrapassou o dia
+		if overtime.HoraFim.Before(overtime.HoraInicio) {
+			overtime.HoraFim = overtime.HoraFim.AddDate(0, 0, 1) // Adicionar um dia ao horário de término
+		}
+
+		// Calcular a diferença entre o horário de início e término em minutos
+		duration := overtime.HoraFim.Sub(overtime.HoraInicio)
+		totalMinutes := duration.Minutes()
+
+		// Subtrair a pausa dos minutos totais
+		totalMinutes -= overtime.Pausa
+
+		// Formatando para horas e minutos
+		hours := int(totalMinutes / 60)
+		minutes := int(totalMinutes) % 60
+
+		// Armazenar o total formatado no campo HorasExtras
+		overtime.HorasExtras = float64(hours) + float64(minutes)/100
+
 		overtimes = append(overtimes, overtime)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("erro ao ler as linhas do resultado da consulta: %v", err)
+		return nil, fmt.Errorf("Erro ao ler as linhas do resultado da consulta: %v", err)
 	}
 
 	return overtimes, nil

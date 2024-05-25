@@ -104,7 +104,8 @@ func getTotalMinutes(overtimes []database.Overtime) float64 {
 			end = end.AddDate(0, 0, 1) // Adicionar um dia ao horário de término
 		}
 
-		duration := end.Sub(start)         // Calcular a diferença entre os horários
+		// Calcular a diferença entre os horários e subtrair a pausa
+		duration := end.Sub(start) - time.Duration(overtime.Pausa)*time.Minute
 		totalMinutes += duration.Minutes() // Converter a diferença para minutos
 	}
 	return totalMinutes

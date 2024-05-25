@@ -27,4 +27,5 @@ type Overtime struct {
 	HoraFim         time.Time
 	HorasExtras     float64
 	Observacao      string
+	Pausa           float64
 }
